@@ -1,0 +1,7 @@
+---
+# defaults file for ansible_zfs-dataset
+fstype: zfs
+dev: /dev/nvme0n1
+mount: /home
+opts: "rw"
+state: mounted

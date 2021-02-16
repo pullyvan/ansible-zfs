@@ -1,0 +1,100 @@
+---
+# tasks file for mount_hdd2
+- name: bare include (free-form)
+  include_vars: ../vars/main.yml
+
+- name: Install ZFS
+  apt:
+    name: zfs-initramfs
+    state: present
+
+- name: Check if nvme0n1 exists
+  stat:
+    path: "{{ dev }}"
+  register: hdd2
+
+- name: Get System Details
+  stat: path={{ dev }}
+  register: check_mount
+  when: hdd2.stat.exists == False
+
+- debug:
+    msg: >
+      {{ check_mount.stat }}
+  when: hdd2.stat.exists == False
+
+# Check the type of filesysttem if its data we need to format
+- shell: file -s {{ dev }}
+  register: fs
+  when: hdd2.stat.exists == False
+
+- set_fact:
+    format_fs: true
+    when: "'{{ dev }}: data' in fs.stdout "
+
+- name: Format filesystem
+  filesystem: fstype={{ fstype }} dev={{ dev }}
+  when: format_fs is defined and format_fs == true and hdd2.stat.exists == False
+
+- name: Unmount
+  mount:
+    path: /home
+    state: unmounted
+
+- name: Destroy zPool clusterhome
+  command:
+      cmd: zpool destroy clusterhome
+  ignore_errors: yes
+
+- name: Create zPool clusterhome
+  command:
+      cmd: zpool create -o ashift=12 -O atime=off -O compression=lz4 -O normalization=formD clusterhome /dev/nvme0n1
+
+- name: Get System Details
+  stat: path={{ dev }}
+  register: check_mount
+  when: hdd2.stat.exists == False
+
+- debug:
+    msg: >
+      {{ check_mount.stat }}
+  when: hdd2.stat.exists == False
+
+# Check the type of filesysttem if its data we need to format
+- shell: file -s {{ dev }}
+  register: fs
+  when: hdd2.stat.exists == False
+
+- set_fact:
+    format_fs: true
+    when: "'{{ dev }}: data' in fs.stdout "
+
+- name: Format filesystem
+  filesystem: fstype={{ fstype }} dev={{ dev }}
+  when: format_fs is defined and format_fs == true and hdd2.stat.exists == False
+
+- name: mount home
+  shell: zfs mount -a
+
+- name: rm -rf /home
+  file:
+    state: absent
+    path: "/home"
+
+- name: Create a new file system called home in pool clusterHome
+  zfs:
+    name: clusterhome/home
+    state: present
+    extra_zfs_properties:
+      mountpoint: /home
+
+- name: Ensure fstab uses nodev
+  mount:
+    name: "home"
+    src: "/home"
+    fstype: "zfs"
+    opts: "nodev"
+    state: present
+  with_items: ansible_mounts
+
+
